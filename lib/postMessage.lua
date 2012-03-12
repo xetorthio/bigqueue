@@ -1,32 +1,23 @@
-local topics = redis.call('lrange','topics',0,-1) 
 local topic = ARGV[1]
 local jsonMessage = ARGV[2]
+local topicKey = 'topics:'..topic
+local key = redis.call('incr',topicKey..':head') 
+local msgKey = topicKey..':messages:'..key 
 
-found = false
-for key,t in pairs(topics) do
-    if t == topic then 
-        found = true  
-    end 
+-- If no ttl send an error
+local ttl = redis.call('get',topicKey..':ttl')
+if not ttl then
+    return {err="Ttl for is not set for topic ["..topic.."]"}
 end 
-if not found then
-    return {err='Topic ['..topic..'] not found'}  
-end
 
-topicKey = 'topics:'..topic
-consumers = redis.call('lrange',topicKey..':consumers',0,-1) 
-if table.getn(consumers) <1 then
-    return -1
-end
-
-key = redis.call('incr',topicKey..':counterId') 
-msgKey = 'messages:'..topic..':'..key 
-ttl = redis.call('get',topicKey..':ttl') 
 message = cjson.decode(jsonMessage)
+
+if message["msg"] == nil then
+    return {err="Message must contains the msg property"}
+end
+
 for k,v in pairs(message) do
-    redis.call('set',msgKey..':'..k,v) 
-    redis.call('expire',msgKey..':'..k,ttl) 
+    redis.call('hmset',msgKey,k,v) 
 end
-for k,c in pairs(consumers) do 
-    redis.call('rpush','consumers:'..topic..':'..c,key) 
-end
+redis.call('expire',msgKey,ttl) 
 return key
