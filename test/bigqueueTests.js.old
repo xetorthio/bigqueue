@@ -1,0 +1,320 @@
+var should = require('should'),
+    redis = require('redis'),
+    spawn = require('child_process').spawn;
+
+var bigqueue = require('../lib/bigqueue.js')
+
+var topicsKey = "topics"
+
+var fail = function(){should.fail("Not implemented")}
+
+contains = function(arr,obj){
+    for(var i in arr){
+        if(arr[i] === obj)
+            return true
+    }
+    return false
+}
+
+describe("bigqueue", function(){
+        var redisServers=[{host:"127.0.0.1", port:6379},{host:"127.0.0.1", port:6380}]
+        var redis1 = spawn("redis-server", ["test/resources/redis1.conf"]) 
+        var redis2 = spawn("redis-server", ["test/resources/redis2.conf"])
+        var client1
+        var client2
+ 
+        before(function(done){
+            process.nextTick(function(){         
+                client1 = redis.createClient(6379,"127.0.0.1",null);
+                client2 = redis.createClient(6380,"127.0.0.1",null);
+                done()
+            })
+
+        })
+        
+        after(function(done){
+            client1.flushall(function(err){
+                 redis1.kill()
+                 client2.flushall(function(err){
+                    redis2.kill()
+                    done()
+                });
+            });
+            
+        })
+
+        describe("#createTopic()", function(){
+           beforeEach(function(){
+                client1.flushall();
+                client2.flushall();
+           });
+           it("Should add the entry to the topics list in all redis-server",function(done){
+                var bqClient = bigqueue.createClient(redisServers)
+                bqClient.on("error",function(err){
+                    throw err; 
+                })
+                bqClient.createTopic("testTopic",1,function(err){
+                    should.not.exist(err)
+                    client1.lrange(topicsKey,0,-1,function(err, resp){
+                        should.not.exist(err)
+                        should.exist(resp)
+                        resp.should.have.lengthOf(1)
+                        resp[0].should.equal("testTopic")
+                        client2.lrange(topicsKey,0,-1,function(err, resp){
+                            should.not.exist(err)
+                            should.exist(resp)
+                            resp.should.have.lengthOf(1)
+                            resp[0].should.equal("testTopic")
+                            done();
+                        })
+
+                    })
+                })
+           })
+           it("Should create the topics:topic:ttl entry in all redis-server",function(done){
+               var bqClient = bigqueue.createClient(redisServers)
+               bqClient.on("error",function(){
+               })
+               bqClient.createTopic("testTopic",1,function(err){
+                   should.not.exist(err)
+                client1.get(topicsKey+":testTopic:ttl",function(err,data){
+                    should.not.exist(err)
+                    should.exist(data)
+                    data.should.equal("1")
+                    bqClient.createTopic("testTopic2",1,function(err){
+                       should.not.exist(err)
+                       client1.get(topicsKey+":testTopic2:ttl",function(err,data){
+                           should.not.exist(err)
+                           should.exist(data)
+                           data.should.equal("1")
+                           done()
+                       });
+                    })
+                 });
+              })
+           })
+
+           it("Should fail if the topic already exist in all redis-server",function(done){
+              var bqClient = bigqueue.createClient(redisServers)
+              bqClient.createTopic("testTopic",1,function(err){
+                 should.not.exist(err)
+                 bqClient.createTopic("testTopic",1,function(err){
+                     should.exist(err)
+                     done();
+                 })
+              })
+           })
+        })
+
+        describe("#createConsumerGroup()", function(){
+          var bqClient
+          beforeEach(function(done){
+              bqClient = bigqueue.createClient(redisServers)
+              client1.flushall(function(err){
+                client2.flushall(function(err){
+                     bqClient.createTopic("testTopic",1,function(err){
+                        done(); 
+                     })
+                });
+              });
+            });
+
+
+          it("Should add the entry to the topics:topic:consumers list in all redis-server",function(done){
+              bqClient.createConsumerGroup("testTopic","group-test",function(err){
+                  should.not.exist(err)
+                  client1.lrange("topics:testTopic:consumers",0,-1,function(err,data){
+                      should.not.exist(err)
+                      should.exist(data)
+                      contains(data,"group-test").should.be.ok
+                      client1.lrange("topics:testTopic:consumers",0,-1,function(err,data){
+                         should.not.exist(err)
+                         should.exist(data)
+                         contains(data,"group-test").should.be.ok
+                         done()
+                      })
+                  })
+              })
+          })
+          it("Should fail if the group already exist",function(done){
+              bqClient.createConsumerGroup("testTopic","group-test",function(err){
+                   should.not.exist(err)
+                   bqClient.createConsumerGroup("testTopic","group-test",function(err){
+                     should.exist(err)
+                     done()
+                   })
+             })
+          })
+          it("Should fail if the topic doesn't exist",function(done){
+              bqClient.createConsumerGroup("testTopic-no-exist","group-test",function(err){
+                   should.exist(err)
+                   done()
+              }) 
+          })
+        })
+
+        describe("#postMessage()", function(){
+            var bqClient
+            beforeEach(function(done){
+              bqClient = bigqueue.createClient(redisServers)
+              client1.flushall(function(err){
+                client2.flushall(function(err){
+                     bqClient.createTopic("testTopic",120,function(err){
+                        bqClient.createConsumerGroup("testTopic","testConsumer",function(err){
+                            done();
+                        })
+                     })
+                });
+              });
+            });
+
+           it("Should register the message in redis with format messages:topic:key:[properties]",function(done){
+                bqClient.postMessage("testTopic",{msg:"msg1"},function(err,key1){
+                    should.not.exist(err)
+                    key1.should.not.equal(-1)
+                    client1.get("messages:testTopic:"+key1+":msg",function(err1,data1){
+                        client2.get("messages:testTopic:"+key1+":msg",function(err2,data2){
+                            var full;
+                            var empty;
+                            if(data1){
+                                full = data1
+                                empty = data2
+                            }else if(data2){
+                                full = data2
+                                empty = data1
+                            }else{
+                                done("Error posting data")
+                            }
+                            full.should.not.be.empty
+                            full.should.equal("msg1")
+                            should.not.exist(empty)
+                            done()
+                        })
+                    })
+               })
+           })
+           it("Should fail if the msg key is not set",function(done){
+                bqClient.postMessage("testTopic",{},function(err,key1){
+                    should.exist(err)
+                    done()
+                })
+           })
+           it("Should balance between the redis servers",function(done){
+                 bqClient.postMessage("testTopic",{msg:"msg1", key:1},function(err,key1){
+                    should.not.exist(err)
+                    key1.should.not.equal(-1)
+                    bqClient.postMessage("testTopic",{msg:"msg1", key:2},function(err,key2){
+                        should.not.exist(err)
+                        key2.should.not.equal(-1)
+                        bqClient.postMessage("testTopic",{msg:"msg1", key:3},function(err,key3){
+                            should.not.exist(err)
+                            key3.should.not.equal(-1)
+                            client1.lrange("consumers:testTopic:testConsumer",0,-1,function(err1,data1){
+                                client2.lrange("consumers:testTopic:testConsumer",0,-1,function(err2,data2){
+                                    if(data1.length>1){
+                                        data1.should.have.length(2)
+                                        data2.should.have.length(1)
+                                        done();
+                                    }else{
+                                        data2.should.have.length(2)
+                                        data1.should.have.length(1)
+                                        done();
+
+                                    }
+                                })
+                            })                                                                    
+                        })
+                    })
+                })
+
+           })
+           it("Should set the ttl registered into topics:topic:ttl key",function(done){
+                bqClient.postMessage("testTopic",{msg:"msg1"},function(err,key1){
+                    should.not.exist(err)
+                    key1.should.be.above(0)
+                    client1.ttl("messages:testTopic:"+key1+":msg",function(err1,data1){
+                        client2.ttl("messages:testTopic:"+key1+":msg",function(err2,data2){
+                            var data;
+                            if(data1 && data1 > 0){
+                                data = data1
+                            }else{
+                                data = data2;
+                            }
+                            data.should.be.below(121)
+                            data.should.be.above(119)
+                            done()
+                        })
+                    })
+                })
+           })
+           it("Should register the createTime properties",function(done){
+                bqClient.postMessage("testTopic",{msg:"msg1"},function(err,key1){
+                    should.not.exist(err)
+                    key1.should.be.above(0)
+                    client1.get("messages:testTopic:"+key1+":createTime",function(err1,data1){
+                        client2.get("messages:testTopic:"+key1+":createTime",function(err2,data2){
+                            var full;
+                            var empty;
+                            if(data1){
+                                full = data1
+                                empty = data2
+                            }else if(data2){
+                                full = data2
+                                empty = data1
+                            }else{
+                                done("Error posting data")
+                            }
+                            full.should.not.be.empty
+                            should.not.exist(empty)
+                            done()
+                        })
+                    })
+               })
+
+           })
+           it("Should load the message key into each consummers:topic:consumer queue registered into topics:topic:consumers list",function(done){
+                bqClient.postMessage("testTopic",{msg:"msg1"},function(err,key1){
+                    should.not.exist(err)
+                    key1.should.be.above(0)
+                    client1.lrange("consumers:testTopic:testConsumer",0,-1,function(err1,data1){
+                        client2.lrange("consumers:testTopic:testConsumer",0,-1,function(err2,data2){
+                           var data
+                           if(data1){
+                            data = data1
+                           }else{
+                            data = data2
+                           }
+                           data.should.have.length(1)
+                           data[0].should.equal(""+key1)
+                           done()
+                        })
+                    })
+ 
+                })
+
+           })
+           it("Should fail if the topic doesn't exist",function(done){
+                bqClient.postMessage("testTopic-no-exist",{msg:"msg1"},function(err,key1){
+                    should.exist(err)
+                    done()
+                })
+
+           })
+        })
+        
+        describe("#getMessages()", function(){
+           it("Should get the message generates the recipientHandler")
+           it("Should update the messages quantity into the key consumers:topic:group:get")
+           it("Should take a message from consumers:topic:group and put it into the consumers:topic:group:processing")
+           it("Should add the key messages:topic:key:consumer with the sent time")
+           it("If a getted message excedes the visibility time the message should be re-sent")
+           it("Should get the capability of get many messages from many redis servers")
+           it("Should fail if the group ")
+        })
+
+        describe("#ack()", function(){
+           it("Should decodify the recipientHandler and remove the if from the consumers:topic:group:processing")
+           it("Should update the messages quantity into the key consumers:topic:group:ack")
+           it("Shoud run with many recipientHandlers")
+        })
+});
