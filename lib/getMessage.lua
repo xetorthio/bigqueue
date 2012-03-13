@@ -59,16 +59,14 @@ if isEmpty(failed) then
    
     ---- Get last id
     local msgId = redis.call("get",lastPointer)
-    -- Get the mssage
     message = getMessage(msgId)
     if isEmpty(message) then
-        -- No message was found with the last id
         local topicHead = redis.call("get",topicKey..":head")
-        if msgId < topicHead then
+        if msgId <= topicHead then
             redis.call("incr",lastPointer)
+            return {err="Message with id ["..msgId.."] was expired"}
         end
     else
-        -- Return the message
         addToProcessing(msgId)
         redis.call("incr",lastPointer)
         addIdToMessage(msgId,message)
