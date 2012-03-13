@@ -12,22 +12,22 @@ describe("Redis lua scripts",function(){
     var failMessageScript; 
     var redisClient;
     before(function(done){
-        fs.readFile('lib/getMessage.lua','ascii',function(err,strFile){
+        fs.readFile('scripts/getMessage.lua','ascii',function(err,strFile){
             should.not.exist(err)
             getMessageScript = strFile
-            fs.readFile('lib/postMessage.lua','ascii',function(err,strFile){
+            fs.readFile('scripts/postMessage.lua','ascii',function(err,strFile){
                 should.not.exist(err)
                 postMessageScript = strFile
-                fs.readFile('lib/createConsumer.lua','ascii',function(err,strFile){
+                fs.readFile('scripts/createConsumer.lua','ascii',function(err,strFile){
                     should.not.exist(err)
                     createConsumerScript = strFile
-                    fs.readFile('lib/createTopic.lua','ascii',function(err,strFile){
+                    fs.readFile('scripts/createTopic.lua','ascii',function(err,strFile){
                         should.not.exist(err)
                         createTopicScript = strFile
-                        fs.readFile('lib/ack.lua','ascii',function(err,strFile){
+                        fs.readFile('scripts/ack.lua','ascii',function(err,strFile){
                             should.not.exist(err)
                             ackMessageScript = strFile
-                            fs.readFile('lib/fail.lua','ascii',function(err,strFile){
+                            fs.readFile('scripts/fail.lua','ascii',function(err,strFile){
                                 should.not.exist(err)
                                 failMessageScript = strFile
                                 redisClient = redis.createClient()
