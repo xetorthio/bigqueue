@@ -11,6 +11,6 @@ if exist == 1 then
     return {err="Topic ["..topic.."] already exist"}
 end
 
-redis.call("set","topics:testTopic:ttl",ttl)
+redis.call("set","topics:"..topic..":ttl",ttl)
 redis.call("sadd","topics",topic)
 return
