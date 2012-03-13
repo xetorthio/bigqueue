@@ -51,35 +51,41 @@ end
 
 -- Get take failed message without remove
 local failed = redis.call("lrange",failsList,0,0) 
+-- The message to be returned
+local message 
 
 if isEmpty(failed) then
     -- Standar flow if no failed found
    
     ---- Get last id
     local msgId = redis.call("get",lastPointer)
-    
-    local message = getMessage(msgId)
+    -- Get the mssage
+    message = getMessage(msgId)
     if isEmpty(message) then
+        -- No message was found with the last id
         local topicHead = redis.call("get",topicKey..":head")
         if msgId < topicHead then
             redis.call("incr",lastPointer)
         end
-        return {}
+    else
+        -- Return the message
+        addToProcessing(msgId)
+        redis.call("incr",lastPointer)
+        addIdToMessage(msgId,message)
     end
-    addToProcessing(msgId)
-    redis.call("incr",lastPointer)
-    addIdToMessage(msgId,message)
-    return message 
 else
     -- if a failed message found
     local msgId = failed[1]
-    local message = getMessage(msgId)
+    message = getMessage(msgId)
     if isEmpty(message) then
         return {err="Message with id ["..msgId.."] was expired"}
     end
     addToProcessing(msgId)
     addIdToMessage(msgId,message)
-    return message
+    -- Remove item from queue after it is set to processing
+    redis.call("lpop",failsList)
 end
+
+return message
 
 

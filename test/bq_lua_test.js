@@ -42,7 +42,7 @@ describe("Redis lua scripts",function(){
         })
     })
 
-    describe("#createTopicScript",function(){
+    describe("#createTopic",function(){
         beforeEach(function(done){
             redisClient.flushall(function(err){
                 done();
@@ -320,33 +320,142 @@ describe("Redis lua scripts",function(){
             })
         })
         it("should get a failed message over an stander message if topics:topic:consumers:consumer:fails is not empty",function(done){
-            redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,data){
-                var expired = tms-21
-                redisClient.eval(postMessageScript, 0, "testTopic", JSON.stringify({msg:"testMessage"}), function(err, newId){
-                    should.not.exist(err)
-                    redisClient.lpush("topics:testTopic:consumers:testConsumer:fails",newId,function(err,data){
-                        redisClient.eval(getMessageScript,0,expired,"testTopic","testConsumer","20",function(err,data1){
+            var expired = tms-21
+            redisClient.eval(postMessageScript, 0, "testTopic", JSON.stringify({msg:"testMessage"}), function(err, newId){
+                should.not.exist(err)
+                redisClient.lpush("topics:testTopic:consumers:testConsumer:fails",newId,function(err,data){
+                    redisClient.eval(getMessageScript,0,expired,"testTopic","testConsumer","20",function(err,data1){
+                        should.not.exist(err)
+                        redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,data2){
+                            var obj1 = redisListToObj(data1)
+                            var obj2 = redisListToObj(data2)
+                            should.exist(obj1)
+                            should.exist(obj2)
+                            obj1.id.should.equal(""+newId)
+                            done()
+                        })
+                    })
+                })
+            })
+        })
+        it("should put into the processing list a failed message got",function(done){
+            redisClient.eval(postMessageScript, 0, "testTopic", JSON.stringify({msg:"testMessage"}), function(err, newId){
+                should.not.exist(err)
+                redisClient.lpush("topics:testTopic:consumers:testConsumer:fails",newId,function(err,data){
+                    redisClient.lpush("topics:testTopic:consumers:testConsumer:fails","1",function(err,data){
+                        redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,data1){
                             should.not.exist(err)
                             redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,data2){
                                 var obj1 = redisListToObj(data1)
                                 var obj2 = redisListToObj(data2)
-                                should.exist(obj1)
-                                should.exist(obj2)
-                                obj1.id.should.equal(""+newId)
-                                done()
+                                redisClient.zrangebyscore("topics:testTopic:consumers:testConsumer:processing","-inf","+inf",function(err,data){
+                                    data.should.have.length(2)
+                                    data.should.include(obj1.id)
+                                    data.should.include(obj2.id)
+                                    redisClient.llen("topics:testTopic:consumers:testConsumer:fails",function(err,data){
+                                        data.should.equal(0)
+                                        done()
+                                   })
+                                })
                             })
                         })
                     })
                 })
             })
         })
-        it("should put into the processing list a failed message got")
-        it("should throw an error if a failed message was expired")
-        it("should increment the topics:topic:consumers:consumer:last after a get")
-        it("shouldn't increment the topics:topic:consumers:consumer:last if the message is from the fails list")
-        it("shouldn't no increment the topics:topic:consumers:consumer:last if there are no more messages")
-        it("should return null if no object was found")
-        it("should fail if topic doesn't exist")
-        it("should fail if the consumerGrouo dosn't exist") 
+        it("should throw an error if a failed message was expired or not exist",function(done){
+            redisClient.lpush("topics:testTopic:consumers:testConsumer:fails","5",function(err,data){
+                should.not.exist(err)
+                redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,data){
+                    should.exist(err)
+                    done()
+
+                })
+            })
+        })
+        it("should increment the topics:topic:consumers:consumer:last after a get",function(done){
+            redisClient.get("topics:testTopic:consumers:testConsumer:last",function(err,data){
+                should.not.exist(err)
+                var last = parseInt(data);
+                redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,obj){
+                    redisClient.get("topics:testTopic:consumers:testConsumer:last",function(err,newLast){
+                        should.not.exist(err)
+                        newLast.should.equal(""+(last+1))
+                        done()
+                    })
+                })
+
+            })
+        })
+        it("shouldn't increment the topics:topic:consumers:consumer:last if the message is from the fails list",function(done){
+             redisClient.get("topics:testTopic:consumers:testConsumer:last",function(err,data){
+                should.not.exist(err)
+                var last = parseInt(data);
+                redisClient.lpush("topics:testTopic:consumers:testConsumer:fails","5",function(err,data){
+                    redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,data){
+                        redisClient.get("topics:testTopic:consumers:testConsumer:last",function(err,newLast){
+                            should.not.exist(err)
+                            newLast.should.equal(""+last)
+                            done()
+                        })
+                    })
+                })
+             })
+        })
+        it("shouldn't increment the topics:topic:consumers:consumer:last if there are no more messages",function(done){
+            redisClient.get("topics:testTopic:consumers:testConsumer:last",function(err,data){
+                should.not.exist(err)
+                var last = parseInt(data);
+                redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,data){
+                    should.not.exist(err)
+                    redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,data){
+                        should.not.exist(err)
+                        //Get 2 messages but the id must be incremented one time because the las item was reached
+                        redisClient.get("topics:testTopic:consumers:testConsumer:last",function(err,newLast){
+                            should.not.exist(err)
+                            newLast.should.equal(""+(last+1))
+                            done()
+                        })
+                    })
+                })
+            })
+
+        })
+        it("should return void object if no message was found",function(done){
+            redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,data){
+                should.not.exist(err)
+                redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer","20",function(err,data){
+                    should.not.exist(err)
+                    should.exist(data)
+                    data.should.be.empty
+                    done()
+                })
+            })
+
+        })
+        it("should fail if topic doesn't exist",function(done){
+            redisClient.eval(getMessageScript,0,tms,"testTopic-noExist","testConsumer","20",function(err,obj){
+                should.exist(err)
+                done()
+            })
+        })
+        it("should fail if the consumerGrouo dosn't exist",function(done){
+            redisClient.eval(getMessageScript,0,tms,"testTopic","testConsumer-no-exist","20",function(err,obj){
+                should.exist(err)
+                done()
+            })
+        })
+    })
+
+    describe("#ackMessage",function(){
+        it("should remove the id from the processing list")
+        it("should fail if topic dosn't exist")
+        it("should fail if consumer dosn't exist")
+    })
+
+    describe("#failMessage",function(){
+        it("should move the id from the processing list to the fails list")
+        it("should fail if topic dosn't exist")
+        it("should fail if consumer dosn't exist")
     })
 })
