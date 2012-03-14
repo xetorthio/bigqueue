@@ -3,6 +3,7 @@ local consumerGroup = ARGV[2]
 local id = ARGV[3]
 
 local topicKey = "topics:"..topic
+
 local processingKey = topicKey..":consumers:"..consumerGroup..":processing"
 
 local existTopic = redis.call("sismember","topics",topic)
@@ -11,10 +12,10 @@ if existTopic == 0 then
     return {err="Topic ["..topic.."] doesn't exist"}
 end
 
-local existProcessing = redis.call("exists",processingKey)
+local existProcessing = redis.call("sismember",topicKey..":consumers",consumerGroup)
 
 if existProcessing == 0 then
     return {err="Processing list for group ["..consumerGroup.."] of topic ["..topic.."] doesn't exist"}
 end
 
-redis.call("zrem",processingKey,id)
+return redis.call("zrem",processingKey,id)

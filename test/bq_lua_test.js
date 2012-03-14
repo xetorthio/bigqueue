@@ -489,15 +489,22 @@ describe("Redis lua scripts",function(){
             })
         })
         it("should fail if topic dosn't exist",function(done){
-            redisClient.eval(ackMessageScript,0,"testTopic-noExist","testConsumer","2",function(err,data){
+            redisClient.eval(ackMessageScript,0,"testTopic-noExist","testConsumer","1",function(err,data){
                 should.exist(err)
                 done()
             })
 
         })
         it("should fail if consumer dosn't exist",function(done){
-            redisClient.eval(ackMessageScript,0,"testTopic","testConsumer-noExist","2",function(err,data){
+            redisClient.eval(ackMessageScript,0,"testTopic","testConsumer-noExist","1",function(err,data){
                 should.exist(err)
+                done()
+            })
+        })
+        it("should return 0 if no ack was found",function(done){
+            redisClient.eval(ackMessageScript,0,"testTopic","testConsumer","5",function(err,data){
+                should.not.exist(err)
+                data.should.equal(0)
                 done()
             })
         })

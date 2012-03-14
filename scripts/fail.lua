@@ -6,7 +6,6 @@ local topicKey = "topics:"..topic
 local consumerKey = topicKey..":consumers:"..consumerGroup
 local processingKey = consumerKey..":processing"
 local failsKey = consumerKey..":fails"
-print(failsKey)
 local existTopic = redis.call("sismember","topics",topic)
 
 if existTopic == 0 then
