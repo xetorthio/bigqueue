@@ -4,7 +4,7 @@ local tms = ARGV[1]
 local topic = ARGV[2]
 local consumerGroup = ARGV[3]
 local visibilityWindow = ARGV[4]
-if visibilityWindow == nil then
+if visibilityWindow == nil or tonumber(visibilityWindow) <= 0 then
     visibilityWindow=120
 end
 

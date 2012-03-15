@@ -1,6 +1,6 @@
 local topic = ARGV[1]
 local ttl = ARGV[2]
-if ttl == nil then
+if ttl == nil or tonumber(ttl) <= 0 then
     -- Default ttl one day
     ttl = 24*60*60
 end

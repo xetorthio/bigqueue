@@ -30,10 +30,11 @@ describe("Redis lua scripts",function(){
                             fs.readFile('scripts/fail.lua','ascii',function(err,strFile){
                                 should.not.exist(err)
                                 failMessageScript = strFile
-                                redisClient = redis.createClient()
+                                redisClient = redis.createClient(6379,"127.0.0.1")
                                 redisClient.on("ready",function(){
                                     done()
                                 })
+                                redisClient.on("error",function(){})
                             })
                         })
                     })

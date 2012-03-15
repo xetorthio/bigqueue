@@ -13,7 +13,6 @@ if existTopic == 0 then
 end
 
 local existProcessing = redis.call("exists",processingKey)
-
 if existProcessing == 0 then
     return {err="Processing list for group ["..consumerGroup.."] of topic ["..topic.."] doesn't exist"}
 end
