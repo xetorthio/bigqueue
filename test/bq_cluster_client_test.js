@@ -23,7 +23,8 @@ describe("Big Queue Cluster",function(){
         "createClientFunction":bq.createClient
     }
 
-    var zk
+    var zk = new ZK(zkConfig)
+
     var bqClient
     var redisClient1
     var redisClient2
@@ -38,12 +39,8 @@ describe("Big Queue Cluster",function(){
         })
     }) 
 
-    beforeEach(function(){
-        zk = new ZK(zkConfig)
-    })
-
-    beforeEach(function(done){
-        zk.connect(function(err){
+    before(function(done){
+         zk.connect(function(err){
             if(err){
                 done(err)
             }else{
@@ -63,14 +60,21 @@ describe("Big Queue Cluster",function(){
     /**
       * Delete recursively all 
       */ 
-    var deleteAll = function(zk,path,cb){
+    var deleteAll = function(zk,path,cb,c){
+        c = c || 0
         zk.a_get_children(path,false,function(rc,error,children){
-            var total = children.length
+            var total = 0
+            if(children)
+                total = children.length
             var count = 0
             if(total == 0){
-                zk.a_delete_(path,-1,function(rc,error){
+                if(c>0){
+                    zk.a_delete_(path,-1,function(rc,error){
+                        cb()
+                    })
+                }else{
                     cb()
-                })
+                }
             }
             for(var i in children){
                 var p = path+"/"+children[i]
@@ -81,14 +85,14 @@ describe("Big Queue Cluster",function(){
                             cb()
                         })
                      }
-                })
+                },c++)
             }
         })
 
     }
 
     beforeEach(function(done){
-        zk.a_create("/bq","",-1,function(rc,error,path){    
+        zk.a_create("/bq","",0,function(rc,error,path){    
             zk.a_create("/bq/clusters","",0,function(rc,error,path){
                 zk.a_create("/bq/clusters/test","",0,function(rc,error,path){
                     deleteAll(zk,"/bq/clusters/test",function(){
@@ -110,23 +114,21 @@ describe("Big Queue Cluster",function(){
         })
     }) 
 
-    afterEach(function(){
-        zk.close()       
-        delete bqClient 
-    })
 
     //End of prepare stage 
 
     describe("#createTopic",function(){
-        it("should register the topic after creation",function(done){
+        it("should register the topic after creation and create the consumer node",function(done){
             bqClient.createTopic("testTopic",function(err){
                 should.not.exist(err)
                 zk.a_exists(clusterPath+"/topics/testTopic",false,function(rc,error,stat){
-                    if(rc!=0){
-                        done(rc+"-"+error)
-                    }else{
-                        done()
-                    }
+                    zk.a_exists(clusterPath+"/topics/testTopic/consumerGroups",false,function(rc,error,stat){
+                        if(rc!=0){
+                            done(rc+"-"+error)
+                        }else{
+                            done()
+                        }
+                    })
                 })
             })
         })
@@ -167,11 +169,17 @@ describe("Big Queue Cluster",function(){
         })
     })
 
-    describe("#createConsumer",function(){
+    describe("#createConsumer",function(done){
+        beforeEach(function(done){
+            bqClient.createTopic("testTopic",function(err){
+                should.not.exist(err)
+                done()
+            })
+        })
         it("should register the consumer group after creation",function(done){
             bqClient.createConsumerGroup("testTopic","testConsumer",function(err){
                 should.not.exist(err)
-                zk.a_exists(clusterPath+"/topics/testTopic/consumers/testConsumer",false,function(rc,error,stat){
+                zk.a_exists(clusterPath+"/topics/testTopic/consumerGroups/testConsumer",false,function(rc,error,stat){
                     if(rc!=0){
                         done(rc+"-"+error)
                     }else{
@@ -180,9 +188,41 @@ describe("Big Queue Cluster",function(){
                 })
             })
         })
-        it("should fail if some registered server isn't up")
-        it("should propagate the creation through all nodes")
-        it("should fail if any redis get an error on create")
+        it("should fail if some registered server isn't up",function(done){
+            zk.a_set("/bq/clusters/test/nodes/redis2",JSON.stringify({"host":"127.0.0.1","port":6380,"errors":0,"status":"DOWN"}),-1,function(rc, err,stat){
+                rc.should.equal(0)
+                var client = bqc.createClusterClient(bqClientConfig)
+                client.once("ready",function(){
+                    client.createConsumerGroup("testTopic","testConsumer",function(err){
+                        should.exist(err)
+                        done()            
+                    })
+                })
+            })
+        })
+        it("should propagate the creation through all nodes",function(done){
+            bqClient.createConsumerGroup("testTopic","testConsumer",function(err){
+                should.not.exist(err)
+                redisClient1.sismember("topics:testTopic:consumers","testConsumer",function(err,data){
+                    should.not.exist(err)
+                    data.should.equal(1)
+                    redisClient2.sismember("topics:testTopic:consumers","testConsumer",function(err,data){
+                        should.not.exist(err)
+                        data.should.equal(1)
+                        done()
+                    })
+                })
+            })
+        })
+        it("should fail if any redis get an error on create",function(done){
+            redisClient2.del("topics",function(err,data){
+                should.not.exist(err)
+                bqClient.createConsumerGroup("testTopic","testConsumer",function(err){
+                    should.exist(err)
+                    done()            
+                })
+            })
+        })
     })
 
     describe("#getMessage",function(){

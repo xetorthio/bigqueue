@@ -1,5 +1,7 @@
 test:
-	./node_modules/.bin/_mocha \
-	--reporter spec
+	for i in `ls test/*.js`; do\
+		./node_modules/.bin/_mocha --globals myThis,myHolder,myCallee --reporter spec $$i; \
+	done \
+
 
 .PHONY: test
