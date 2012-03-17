@@ -4,6 +4,7 @@ var should = require('should'),
     bq = require('../lib/bq_client.js'),
     bqc = require('../lib/bq_cluster_client.js')
 
+var j = 0
 describe("Big Queue Cluster",function(){
     
     //Prepare stage
@@ -223,6 +224,15 @@ describe("Big Queue Cluster",function(){
                 })
             })
         })
+    })
+
+    describe("#postMessage",function(){
+        it("should balance the writes")
+        it("should try to resend the message to another node if an error ocurrs sending")
+        it("should transform the post id to a uid for the cluster")
+        it("should notify an error to zookeeper on redis connection error")
+        it("should cache the data and resend it if a node goes down")
+        it("should try with other node if one fails")
     })
 
     describe("#getMessage",function(){
