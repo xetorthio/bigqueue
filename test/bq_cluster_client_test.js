@@ -14,8 +14,7 @@ describe("Big Queue Cluster",function(){
             connect: "localhost:2181",
             timeout: 200000,
             debug_level: ZK.ZOO_LOG_LEVEL_WARN,
-            host_order_deterministic: false,
-            data_as_buffer:false
+            host_order_deterministic: false
         }   
 
     var bqClientConfig = {
@@ -115,6 +114,9 @@ describe("Big Queue Cluster",function(){
         })
     }) 
 
+    afterEach(function(){
+        bqClient.shutdown()
+    })
 
     //End of prepare stage 
 
@@ -227,38 +229,274 @@ describe("Big Queue Cluster",function(){
     })
 
     describe("#postMessage",function(){
-        it("should balance the writes")
-        it("should try to resend the message to another node if an error ocurrs sending")
-        it("should transform the post id to a uid for the cluster")
-        it("should notify an error to zookeeper on redis connection error")
-        it("should cache the data and resend it if a node goes down")
-        it("should try with other node if one fails")
-    })
+        beforeEach(function(done){
+            bqClient.createTopic("testTopic",function(err){
+                should.not.exist(err)
+                done()
+            })
+        })
+        it("should balance the writes",function(done){
+            bqClient.postMessage("testTopic",{msg:"test1"},function(err,key){
+                bqClient.postMessage("testTopic",{msg:"test2"},function(err,key){
+                    bqClient.postMessage("testTopic",{msg:"test3"},function(err,key){
+                        bqClient.postMessage("testTopic",{msg:"test4"},function(err,key){
+                            redisClient1.get("topics:testTopic:head",function(err,data){
+                                should.not.exist(err)
+                                should.exist(data)
+                                data.should.equal(""+2)
+                                redisClient2.get("topics:testTopic:head",function(err,data){
+                                    should.not.exist(err)
+                                    should.exist(data)
+                                    data.should.equal(""+2)
+                                    done()
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
+        it("should try to resend the message to another node if an error ocurrs sending",function(done){
+            zk.a_create("/bq/clusters/test/nodes/redis3",JSON.stringify({"host":"127.0.0.1","port":6381,"errors":0,"status":"UP"}),0,function(rc,error,path){
+                bqClient = bqc.createClusterClient(bqClientConfig)
+                bqClient.on("ready",function(){
+                    bqClient.postMessage("testTopic",{msg:"test1"},function(err,key){
+                        bqClient.postMessage("testTopic",{msg:"test2"},function(err,key){
+                            bqClient.postMessage("testTopic",{msg:"test3"},function(err,key){
+                                bqClient.postMessage("testTopic",{msg:"test4"},function(err,key){
+                                    redisClient1.get("topics:testTopic:head",function(err,data1){
+                                        should.not.exist(err)
+                                        should.exist(data1)
+                                        redisClient2.get("topics:testTopic:head",function(err,data2){
+                                            should.not.exist(err)
+                                            should.exist(data2)
+                                            var sum = parseInt(data1)+parseInt(data2)
+                                            sum.should.equal(4)
+                                            done()
+                                        })
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
+        it("should notify an error to zookeeper on node error",function(done){
+            zk.a_create("/bq/clusters/test/nodes/redis3",JSON.stringify({"host":"127.0.0.1","port":6381,"errors":0,"status":"UP"}),0,function(rc,error,path){
+                var oldData
+                zk.aw_get("/bq/clusters/test/nodes/redis3",function(type,state,path){
+                    zk.a_get(path,false,function(rc,error,stat,data){
+                        var newData = JSON.parse(data)
+                        newData.host.should.equal(oldData.host)
+                        newData.port.should.equal(oldData.port)
+                        newData.errors.should.not.equal(oldData.errors)
+                        done()
+                    }) 
+                },
+                function (rc,error,stat,data){
+                    oldData = JSON.parse(data)
+                })
+                bqClient = bqc.createClusterClient(bqClientConfig)
+                bqClient.on("ready",function(){
+                    bqClient.postMessage("testTopic",{msg:"test1"},function(err,key){
+                        bqClient.postMessage("testTopic",{msg:"test2"},function(err,key){
+                            bqClient.postMessage("testTopic",{msg:"test3"},function(err,key){
+                            })
+                        })
+                    })
+                })
+            })
+        })
+        it("should cache the data and resend it if a node goes down",function(done){
+            var self = this
+            bqClient.postMessage("testTopic",{msg:"test1"},function(err,key){
+                bqClient.postMessage("testTopic",{msg:"test2"},function(err,key){
+                    redisClient2.get("topics:testTopic:head",function(err,data){
+                        var oldHead = parseInt(data)
+                        should.not.exist(err)
+                        should.exist(key)
+                        zk.a_set("/bq/clusters/test/nodes/redis1",JSON.stringify({"host":"127.0.0.1","port":6379,"errors":0,"status":"DOWN"}),-1,function(rc,error,stat){
+                            rc.should.equal(0)
+                            var check =function(){
+                                redisClient2.get("topics:testTopic:head",function(err,data){
+                                    var newHead = parseInt(data)
+                                    if(newHead != oldHead){
+                                        newHead.should.equal(oldHead + 1) 
+                                        done()
+                                    }else{
+                                        process.nextTick(check)
+                                    }
+                                })
+                            }
+                            check()
+                        })
+                    })
+                })
+            })
+        })
+        it("should cache the data and resend it if a node is removed",function(done){
+            var self = this
+            bqClient.postMessage("testTopic",{msg:"test1"},function(err,key){
+                bqClient.postMessage("testTopic",{msg:"test2"},function(err,key){
+                    redisClient2.get("topics:testTopic:head",function(err,data){
+                        var oldHead = parseInt(data)
+                        should.not.exist(err)
+                        should.exist(key)
+                        zk.a_delete_("/bq/clusters/test/nodes/redis1",-1,function(rc,error,stat){
+                            rc.should.equal(0)
+                            var check =function(){
+                                redisClient2.get("topics:testTopic:head",function(err,data){
+                                    var newHead = parseInt(data)
+                                    if(newHead != oldHead){
+                                        newHead.should.equal(oldHead + 1) 
+                                        done()
+                                    }else{
+                                        process.nextTick(check)
+                                    }
+                                })
+                            }
+                            check()
+                        })
+                    })
+                })
+            })
+
+        })
+    }) 
 
     describe("#getMessage",function(){
-        it("should generate and add a recipientCallback to the returned message")
-        it("should balance the gets throw all nodes")
-        it("should transform the message id at get action for a uid for the cluster (the same uid that it've generated at post)")
-        it("should return void array if no message found")
-        it("should return void if no redis found")
-        it("should fail if the consumer group doesn't exist")
-    })
-    
-    describe("operations",function(){
-        it("should notify error if a connection error found")
-        it("should add to the node list new nodes found")
-        it("should remove a node from node list if a node is put as DOWN")
-        it("should remove a node from node list if a node is deleted")
-        it("should mantains the topics and consumer list")
-    })
-       
-    describe("#postMessage",function(){
-        it("should try to resend the message to another node if an error ocurrs sending")
-        it("should balance the writes throw all nodes")
-        it("should transform the post id to a uid for the cluster")
-        it("should notify an error to zookeeper on redis connection error")
-        it("should cache the data and resend it if a node goes down")
-        it("should try with other node if one fails")
+        beforeEach(function(done){
+            bqClient.createTopic("testTopic",function(err){
+                bqClient.createConsumerGroup("testTopic","testGroup",function(err){
+                    should.not.exist(err)
+                    done()
+
+                })
+            })
+        })
+
+        it("should generate and add a recipientCallback to the returned message",function(done){
+            bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,key){
+                bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                    should.not.exist(err)
+                    should.exist(data)
+                    data.should.have.property("uid")
+                    data.should.have.property("recipientCallback")
+                    done()
+                })
+           })
+        })
+        it("should balance the gets throw all nodes",function(done){
+            bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,data){
+                bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,data){
+                    bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                            should.not.exist(err)
+                            should.exist(data)
+                            data.should.have.property("uid")
+                            data.should.have.property("recipientCallback")
+                        bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                            should.not.exist(err)
+                            should.exist(data)
+                            data.should.have.property("uid")
+                            data.should.have.property("recipientCallback")
+                            bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                                should.not.exist(err)
+                                should.not.exist(data)
+                                done()
+                            })
+                        })
+                    })
+                })
+           })
+
+        })
+        it("should run ok if a node is down",function(done){
+            bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,data){
+                bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,data){
+                    zk.a_set("/bq/clusters/test/nodes/redis2",JSON.stringify({"host":"127.0.0.1","port":6380,"errors":0,"status":"DOWN"}),-1,function(rc, err,stat){
+                        rc.should.equal(0)
+                         bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                            should.not.exist(err)
+                            should.exist(data)
+                            data.should.have.property("uid")
+                            data.should.have.property("recipientCallback")
+                            done()
+                        })
+                    })
+           
+                })
+            })
+        })
+
+        it("should run ok if a all nodes are down",function(done){
+            bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,data){
+                bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,data){
+                    zk.a_set("/bq/clusters/test/nodes/redis1",JSON.stringify({"host":"127.0.0.1","port":6379,"errors":0,"status":"DOWN"}),-1,function(rc, err,stat){
+                        zk.a_set("/bq/clusters/test/nodes/redis2",JSON.stringify({"host":"127.0.0.1","port":6380,"errors":0,"status":"DOWN"}),-1,function(rc, err,stat){
+                            rc.should.equal(0)
+                            setTimeout(function(){
+                                bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                                    should.not.exist(data)
+                                    done()
+                                })
+                            },100)
+                        })
+                    })
+                })
+            })
+        }) 
+
+        it("should get the uid generated at post instance",function(done){
+            bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,key){
+                var uid = key.uid
+                bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                    should.not.exist(err)
+                    should.exist(data)
+                    data.uid.should.equal(uid)
+                    done()
+                })
+           })
+
+        })
+        it("should return undefined if no message found",function(done){
+            redisClient1.set("topics:testTopic:head",0,function(err,data){
+                redisClient2.set("topics:testTopic:head",0,function(err,data){
+                    bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                        should.not.exist(err)
+                        should.not.exist(data)
+                        done()
+                    })
+                })
+            })
+        })
+        it("should return undefined if error found",function(done){
+            bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                should.not.exist(data)
+                done()
+            })
+        })
+
+        it("should fail if the consumer group doesn't exist",function(done){
+            redisClient1.set("topics:testTopic:head",0,function(err,data){
+                redisClient2.set("topics:testTopic:head",0,function(err,data){
+                    bqClient.getMessage("testTopic","testGroup-no-exist",undefined,function(err,data){
+                        should.exist(err)
+                        done()
+                    })
+               })
+           })
+        })
     })
 
+    describe("ack",function(){
+        it("should receive the recipientCallback ack the message")
+        it("should fail if the target node is down")
+    })
+
+    describe("fail",function(){
+        it("should receive the recipientCallback ack the message")
+        it("should fail if the target node is down")
+   })
+        
 })

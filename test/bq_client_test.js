@@ -136,7 +136,7 @@ describe("Big Queue Client",function(){
         })
 
         it("should get a message stored on redis",function(done){
-            bqClient.getMessage("testTopic","testConsumer",function(err,data){
+            bqClient.getMessage("testTopic","testConsumer",undefined,function(err,data){
                 should.not.exist(err)
                 data.should.have.keys("msg","id")
                 data.id.should.equal(""+generatedKey)
@@ -156,7 +156,7 @@ describe("Big Queue Client",function(){
             })
         })
         it("should get an error if consumer group doesn't exist",function(done){
-            bqClient.getMessage("testTopic","testConsumer-noExist",function(err,data){
+            bqClient.getMessage("testTopic","testConsumer-noExist",undefined,function(err,data){
                 should.exist(err)
                 done()
             })
@@ -169,7 +169,7 @@ describe("Big Queue Client",function(){
             bqClient.createTopic("testTopic",function(err){
                 bqClient.createConsumerGroup("testTopic","testConsumer",function(err){
                     bqClient.postMessage("testTopic",{msg:"test"},function(err,key){
-                        bqClient.getMessage("testTopic","testConsumer",function(err,msg){
+                        bqClient.getMessage("testTopic","testConsumer",undefined,function(err,msg){
                             should.not.exist(err)
                             should.exist(msg)
                             id = msg.id
@@ -210,7 +210,7 @@ describe("Big Queue Client",function(){
             bqClient.createTopic("testTopic",function(err){
                 bqClient.createConsumerGroup("testTopic","testConsumer",function(err){
                     bqClient.postMessage("testTopic",{msg:"test"},function(err,key){
-                        bqClient.getMessage("testTopic","testConsumer",function(err,msg){
+                        bqClient.getMessage("testTopic","testConsumer",undefined,function(err,msg){
                             should.not.exist(err)
                             should.exist(msg)
                             id = msg.id
