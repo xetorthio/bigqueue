@@ -290,7 +290,6 @@ describe("Big Queue Cluster",function(){
                         var newData = JSON.parse(data)
                         newData.host.should.equal(oldData.host)
                         newData.port.should.equal(oldData.port)
-                        newData.errors.should.not.equal(oldData.errors)
                         done()
                     }) 
                 },
@@ -490,13 +489,173 @@ describe("Big Queue Cluster",function(){
     })
 
     describe("ack",function(){
-        it("should receive the recipientCallback ack the message")
-        it("should fail if the target node is down")
+        beforeEach(function(done){
+            bqClient.createTopic("testTopic",function(err){
+                bqClient.createConsumerGroup("testTopic","testGroup",function(err){
+                    should.not.exist(err)
+                    done()
+                })
+            })
+        })
+        it("should receive the recipientCallback ack the message",function(done){
+            bqClient.postMessage("testTopic",{msg:"testMessage"},function(err){
+                bqClient.postMessage("testTopic",{msg:"testMessage"},function(err){
+                    bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                        var recipientCallback = data.recipientCallback
+                        var recipientData = bqClient.decodeRecipientCallback(recipientCallback)
+                        var client
+                        if(recipientData.nodeId == "redis1"){
+                            client = redisClient1
+                        }else{
+                            client = redisClient2
+                        }
+                        client.zrangebyscore("topics:testTopic:consumers:testGroup:processing","-inf","+inf",function(err,data){
+                            should.not.exist(err)
+                            should.exist(data)
+                            data.should.have.length(1)
+                            bqClient.ackMessage("testTopic","testGroup",recipientCallback,function(err){
+                                client.zrangebyscore("topics:testTopic:consumers:testGroup:processing","-inf","+inf",function(err,data){
+                                    should.not.exist(err)
+                                    should.not.exist(err)
+                                    should.exist(data)
+                                    data.should.have.length(0)
+                                    done()
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
+        it("should fail if the target node is down",function(done){
+             bqClient.postMessage("testTopic",{msg:"testMessage"},function(err){
+                bqClient.postMessage("testTopic",{msg:"testMessage"},function(err){
+                    bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                        var recipientCallback = data.recipientCallback
+                        var recipientData = bqClient.decodeRecipientCallback(recipientCallback)
+                        zk.a_set("/bq/clusters/test/nodes/"+recipientData.nodeId,JSON.stringify({"host":"127.0.0.1","port":6380,"errors":0,"status":"DOWN"}),-1,function(rc, err,stat){
+                            setTimeout(function(){
+                                bqClient.ackMessage("testTopic","testGroup",recipientData.id,function(err){
+                                    should.exist(err)
+                                    done()
+                                })
+                            },50)
+                        })
+                    })
+                })
+             })
+        })
     })
 
     describe("fail",function(){
-        it("should receive the recipientCallback ack the message")
-        it("should fail if the target node is down")
+        beforeEach(function(done){
+            bqClient.createTopic("testTopic",function(err){
+                bqClient.createConsumerGroup("testTopic","testGroup",function(err){
+                    should.not.exist(err)
+                    done()
+                })
+            })
+        })
+
+        it("should fail the message using the recipientCallback",function(done){
+            bqClient.postMessage("testTopic",{msg:"testMessage"},function(err){
+                bqClient.postMessage("testTopic",{msg:"testMessage"},function(err){
+                    bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                        should.not.exist(err)
+                        var recipientCallback = data.recipientCallback
+                        var recipientData = bqClient.decodeRecipientCallback(recipientCallback)
+                        var client
+                        if(recipientData.nodeId == "redis1"){
+                            client = redisClient1
+                        }else{
+                            client = redisClient2
+                        }
+                        client.lrange("topics:testTopic:consumers:testConsumer:fails",0,-1,function(err,data){
+                            should.not.exist(err)
+                            should.exist(data)
+                            data.should.have.lengthOf(0)
+                            bqClient.failMessage("testTopic","testGroup",recipientCallback,function(err){
+                                should.not.exist(err)
+                                client.lrange("topics:testTopic:consumers:testGroup:fails",0,-1,function(err,data){
+                                    should.not.exist(err)
+                                    should.exist(data)
+                                    data.should.have.lengthOf(1)
+                                    done()
+                                }) 
+                            })
+                        })
+                    })
+                })
+            })
+        })
+        it("should fail if the target node is down",function(done){
+             bqClient.postMessage("testTopic",{msg:"testMessage"},function(err){
+                bqClient.postMessage("testTopic",{msg:"testMessage"},function(err){
+                    bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                        var recipientCallback = data.recipientCallback
+                        var recipientData = bqClient.decodeRecipientCallback(recipientCallback)
+                        zk.a_set("/bq/clusters/test/nodes/"+recipientData.nodeId,JSON.stringify({"host":"127.0.0.1","port":6380,"errors":0,"status":"DOWN"}),-1,function(rc, err,stat){
+                            setTimeout(function(){
+                                bqClient.failMessage("testTopic","testGroup",recipientData.id,function(err){
+                                    should.exist(err)
+                                    done()
+                                })
+                            },50)
+                        })
+                    })
+                })
+             })
+
+        })
    })
+   
+   describe("#listTopics",function(done){
+       it("should list all the topics created into zookeeper",function(done){
+           bqClient.listTopics(function(data){
+               should.exist(data)
+               data.should.have.lengthOf(0)
+               bqClient.createTopic("testTopic",function(err){
+                   should.not.exist(err)
+                   bqClient.listTopics(function(data){
+                   should.exist(data)
+                   data.should.have.lengthOf(1)
+                   done()
+                  })
+              })
+           })
+       })
+   })
+   describe("#getConsumerGroups",function(done){
+        beforeEach(function(done){
+            bqClient.createTopic("testTopic",function(err){
+                should.not.exist(err)
+                done()
+            })
+        })
+
+        it("should get the consumer group list for a topic",function(done){
+            bqClient.getConsumerGroups("testTopic",function(err,data){
+                should.not.exist(err)
+                data.should.be.empty
+                bqClient.createConsumerGroup("testTopic","testConsumer",function(err){
+                    should.not.exist(err)
+                    bqClient.getConsumerGroups("testTopic",function(err,data){
+                        should.not.exist(err)
+                        data.should.include("testConsumer")
+                        data.should.have.length(1)
+                        done()
+                    })
+                })
+            })
+        })
+        it("should fail if the topic doesn't exist",function(done){
+            bqClient.getConsumerGroups("testTopic-noExist",function(err,data){
+                should.exist(err)
+                done()
+            })
+        })
+
+   })
+   
         
 })
