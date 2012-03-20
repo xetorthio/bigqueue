@@ -1,4 +1,6 @@
-var app = require('express').createServer()
+var express = require('express')
+var app = express.createServer()
+var maxBody = 64*1024
 var bqClient
 
 app.get("/topics",function(req,res){
@@ -31,29 +33,52 @@ app.get("/topics/:topic/consumerGroups",function(req,res){
 })
 
 app.post("/topics/:topic/consumerGroups",function(req,res){
+    var data=""
     req.on("data",function(body){
-        var consumer = JSON.parse(body)
+        data=data+body.toString()
+    })
+    req.on("end",function(){
+        try{
+            var consumer = JSON.parse(data)
+        }catch(e){
+            res.json({err:e},400)
+            return
+        }
         var topic = req.params.topic
         bqClient.createConsumerGroup(topic,consumer.name,function(err){
+            console.log(err)
             if(err){
                 res.json(err,409)
             }else{
                 res.json({name:consumer.name},201)
             }
         })
+
     })
 })
 
 app.post("/topics/:topic/messages",function(req,res){
+    var excedes = false 
+    var data = ""
     req.on("data",function(body){
-        var message = JSON.parse(body)
-        bqClient.postMessage(req.params.topic,message,function(err,data){
-            if(err){
-                res.json(err,400)
-            }else{
-                res.json(data,201)
-            }
-        })
+        data = data+body.toString()
+        if(data.length > maxBody){
+            res.json({err:"Body too long"},414)
+            excedes = true
+            return
+        }
+    })
+    req.on("end",function(){
+        if(!excedes){
+            var message = JSON.parse(data)
+            bqClient.postMessage(req.params.topic,message,function(err,data){
+                if(err){
+                    res.json(err,400)
+                }else{
+                    res.json(data,201)
+                }
+            })
+        }
     })
 })
 
@@ -62,7 +87,7 @@ app.get("/topics/:topic/consumerGroups/:consumer/messages",function(req,res){
         if(err){
             res.json(err,400)
         }else{
-            if(data.id)
+            if(data && data.id)
                 res.json(data,200)
             else
                 res.json({},204)
@@ -81,6 +106,7 @@ app.delete("/topics/:topic/consumerGroups/:consumer/messages/:recipientCallback"
 })
 
 exports.startup = function(config){
+    app.use(express.logger({ format: ':method :url' }))
     app.listen(config.port)
     bqClient = config.bqClientCreateFunction(config.bqConfig)
     console.log("http api running on ["+config.port+"]")

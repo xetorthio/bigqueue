@@ -10,11 +10,12 @@ One of the very atractive things of BQ is the idea of be asynchronous this enabl
 
 TODO
 
-=== Rest Interface
+
+=== BQ Cluster
 
 TODO
 
-=== BQ Cluster
+=== Rest Interface
 
 TODO
 

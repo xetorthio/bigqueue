@@ -308,6 +308,7 @@ describe("http api",function(){
                     response.statusCode.should.equal(200)
                     body.should.have.property("id")
                     body.should.have.property("msg")
+                    body.should.have.property("recipientCallback")
                     body.id.should.equal(""+postId)
                     body.msg.should.equal("testMessage")
                     setTimeout(function(){
@@ -320,6 +321,7 @@ describe("http api",function(){
                             response.statusCode.should.equal(200)
                             body.should.have.property("id")
                             body.should.have.property("msg")
+                            body.should.have.property("recipientCallback")
                             body.id.should.equal(""+postId)
                             body.msg.should.equal("testMessage")
                             done()
@@ -350,7 +352,7 @@ describe("http api",function(){
                     body.id.should.equal(""+postId)
                     body.msg.should.equal("testMessage")
                     request({
-                        uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages/"+body.id,
+                        uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages/"+body.recipientCallback,
                         method:"DELETE",
                         json:true
                     },function(err,response,body){
@@ -431,6 +433,28 @@ describe("http api",function(){
                     })
                 }) 
             })  
+        })
+    })
+
+    describe("Limits",function(){
+        it("should get an error if a posted message have more than 64kb",function(done){
+            var b64kb = function(){
+                var str = ""
+                for(var i=0;i<(64*1024)+1;i++)
+                    str=str+"a"
+                return str
+            }
+            var msg = b64kb()
+            request({
+                uri:"http://127.0.0.1:8080/topics/testTopic/messages",
+                method:"POST",
+                body:msg,
+                headers:{"content-length":msg.length}
+            },function(err,response,body){
+                should.not.exist(err)
+                response.statusCode.should.equal(414)
+                done()
+            })
         })
     })
 })

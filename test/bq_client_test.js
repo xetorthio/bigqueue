@@ -138,7 +138,7 @@ describe("Big Queue Client",function(){
         it("should get a message stored on redis",function(done){
             bqClient.getMessage("testTopic","testConsumer",undefined,function(err,data){
                 should.not.exist(err)
-                data.should.have.keys("msg","id")
+                data.should.have.keys("msg","id","recipientCallback")
                 data.id.should.equal(""+generatedKey)
                 done()
             })    
@@ -172,7 +172,7 @@ describe("Big Queue Client",function(){
                         bqClient.getMessage("testTopic","testConsumer",undefined,function(err,msg){
                             should.not.exist(err)
                             should.exist(msg)
-                            id = msg.id
+                            id = msg.recipientCallback
                             done()
                         })
                     })

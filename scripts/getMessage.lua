@@ -59,6 +59,9 @@ if isEmpty(failed) then
    
     ---- Get last id
     local msgId = redis.call("get",lastPointer)
+    if not msgId then
+        return {err="Last pointer for consumer ["..consumerGroup.."] of topic ["..topic.."] not found"}
+    end
     message = getMessage(msgId)
     if isEmpty(message) then
         local topicHead = redis.call("get",topicKey..":head")
