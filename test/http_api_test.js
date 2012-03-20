@@ -134,7 +134,7 @@ describe("http api",function(){
         })
     })
     describe("Posting messages",function(){
-        it("should can post a message to /topics/topicName/messages",)
+        it("should can post a message to /topics/topicName/messages")
     })
     it("should get an error if topic doesn't exist")
     it("should can get messages from a consumer group")
