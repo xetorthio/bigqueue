@@ -3,3 +3,5 @@
 *.swo
 *.rdb
 .nide
+node_modules
+zookeeper.out
