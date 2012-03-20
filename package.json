@@ -4,6 +4,13 @@
     "version": "0.1.0",
     "author": "",
     "dependencies": {
+	"express" : "2.5.x",
+	"redis" : "0.7.x",
+	"request" : "2.9.x",
+	"zookeeper" : "3.4.x"
     },
-    "devDependencies": {}
+    "devDependencies": {
+        "mocha" : "0.14.x",
+	"should" : "0.6.x"
+    }
 }
