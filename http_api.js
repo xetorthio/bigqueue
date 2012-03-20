@@ -1,6 +1,12 @@
 var app = require('express').createServer()
 var bqClient
 
+app.get("/topics",function(req,res){
+    bqClient.listTopics(function(data){
+        res.json(data,200)
+    })
+})
+
 app.post("/topics",function(req,res){
     req.on("data",function(body){
         var topic = JSON.parse(body)
@@ -11,6 +17,16 @@ app.post("/topics",function(req,res){
                 res.json({name:topic.name},201)
             }
         })
+    })
+})
+
+app.get("/topics/:topic/consumerGroups",function(req,res){
+    bqClient.getConsumerGroups(req.params.topic,function(err,data){
+        if(err){
+            res.json(err,400)
+        }else{
+            res.json(data,200)
+        }
     })
 })
 
@@ -42,11 +58,24 @@ app.post("/topics/:topic/messages",function(req,res){
 })
 
 app.get("/topics/:topic/consumerGroups/:consumer/messages",function(req,res){
-    bqClient.getMessage(req.params.topic,req.params.consumer,req.params.visibilityWindow,function(err,data){
+    bqClient.getMessage(req.params.topic,req.params.consumer,req.query.visibilityWindow,function(err,data){
         if(err){
             res.json(err,400)
         }else{
-            res.json(data,200)
+            if(data.id)
+                res.json(data,200)
+            else
+                res.json({},204)
+        }
+    })
+})
+
+app.delete("/topics/:topic/consumerGroups/:consumer/messages/:recipientCallback",function(req,res){
+    bqClient.ackMessage(req.params.topic,req.params.consumer,req.params.recipientCallback,function(err){
+        if(err){
+            res.json(err,404)
+        }else{
+            res.json({},204)
         }
     })
 })

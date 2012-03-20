@@ -185,12 +185,252 @@ describe("http api",function(){
                 })
             })
         })
-        it("should get an error if we try to get messages from non existent topic")
-        it("should can get messages from a consumer group")
-        it("should can get the same message if this is posted to 2 consumer groups")
-        it("should different messages if to members of the same consumer group do a 'get message'")
-        it("should receive the same message if the visibility window is rached")
-        it("should enable to do a DELETE of a message so this message shouldn't be received another time")
-        it("if a message is set as fail this should be received another time into the same consumer group")
+        it("should return 204 http status if no data could be getted",function(done){
+            request({
+                uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages",
+                method:"GET",
+                json:true
+            },function(error,response,body){
+                response.statusCode.should.equal(204)
+                done()
+            })
+        })
+        it("should get an error if we try to get messages from non existent topic",function(done){
+            request({
+                uri:"http://127.0.0.1:8080/topics/testTopic-dsadsa/consumerGroups/testConsumer1/messages",
+                method:"GET",
+                json:true
+            },function(error,response,body){
+                response.statusCode.should.equal(400)
+                done()
+            })
+        })
+        it("should can get the same message if there are 2 consumer groups",function(done){
+            request({
+                uri:"http://127.0.0.1:8080/topics/testTopic/messages",
+                method:"POST",
+                json:{msg:"testMessage"}
+            },function(error,response,body){
+                should.exist(response)
+                response.statusCode.should.equal(201)
+                body.should.have.property("id")
+                var postId = body.id
+                request({
+                    uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages",
+                    method:"GET",
+                    json:true
+                },function(error,response,body){
+                    should.exist(response)
+                    response.statusCode.should.equal(200)
+                    body.should.have.property("id")
+                    body.should.have.property("msg")
+                    body.id.should.equal(""+postId)
+                    body.msg.should.equal("testMessage")
+                    request({
+                        uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer2/messages",
+                        method:"GET",
+                        json:true
+                    },function(error,response,body){
+                        should.exist(response)
+                        response.statusCode.should.equal(200)
+                        body.should.have.property("id")
+                        body.should.have.property("msg")
+                        body.id.should.equal(""+postId)
+                        body.msg.should.equal("testMessage")
+                        done() 
+                    })
+                })
+            })
+        })
+        it("should get different messages if 2 members of the same consumer group do a 'get message'",function(done){
+            request({
+                uri:"http://127.0.0.1:8080/topics/testTopic/messages",
+                method:"POST",
+                json:{msg:"testMessage"}
+            },function(error,response,body){
+                should.exist(response)
+                response.statusCode.should.equal(201)
+                body.should.have.property("id")
+                var postId1 = body.id
+                request({
+                    uri:"http://127.0.0.1:8080/topics/testTopic/messages",
+                    method:"POST",
+                    json:{msg:"testMessage"}
+                },function(error,response,body){
+                    should.exist(response)
+                    response.statusCode.should.equal(201)
+                    body.should.have.property("id")
+                    var postId2 = body.id
+                    request({
+                        uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages",
+                        method:"GET",
+                        json:true
+                    },function(error,response,body){
+                        should.exist(response)
+                        response.statusCode.should.equal(200)
+                        body.should.have.property("id")
+                        body.should.have.property("msg")
+                        body.id.should.equal(""+postId1)
+                        body.msg.should.equal("testMessage")
+                        request({
+                            uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages",
+                            method:"GET",
+                            json:true
+                        },function(error,response,body){
+                            should.exist(response)
+                            response.statusCode.should.equal(200)
+                            body.should.have.property("id")
+                            body.should.have.property("msg")
+                            body.id.should.equal(""+postId2)
+                            body.msg.should.equal("testMessage")
+                            done()
+                        })
+                    })
+                })
+            })
+        })
+        it("should receive the same message if the visibility window is rached",function(done){
+            request({
+                uri:"http://127.0.0.1:8080/topics/testTopic/messages",
+                method:"POST",
+                json:{msg:"testMessage"}
+            },function(error,response,body){
+                should.exist(response)
+                response.statusCode.should.equal(201)
+                body.should.have.property("id")
+                var postId = body.id
+                request({
+                    uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages?visibilityWindow=1",
+                    method:"GET",
+                    json:true
+                },function(error,response,body){
+                    should.exist(response)
+                    response.statusCode.should.equal(200)
+                    body.should.have.property("id")
+                    body.should.have.property("msg")
+                    body.id.should.equal(""+postId)
+                    body.msg.should.equal("testMessage")
+                    setTimeout(function(){
+                        request({
+                            uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages?visibilityWindow=1",
+                            method:"GET",
+                            json:true
+                        },function(error,response,body){
+                            should.exist(response)
+                            response.statusCode.should.equal(200)
+                            body.should.have.property("id")
+                            body.should.have.property("msg")
+                            body.id.should.equal(""+postId)
+                            body.msg.should.equal("testMessage")
+                            done()
+                        })
+                    },1100)
+                })
+            })
+        })
+        it("should enable to do a DELETE of a message so this message shouldn't be received another time",function(done){
+            request({
+                uri:"http://127.0.0.1:8080/topics/testTopic/messages",
+                method:"POST",
+                json:{msg:"testMessage"}
+            },function(error,response,body){
+                should.exist(response)
+                response.statusCode.should.equal(201)
+                body.should.have.property("id")
+                var postId = body.id
+                request({
+                    uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages?visibilityWindow=1",
+                    method:"GET",
+                    json:true
+                },function(error,response,body){
+                    should.exist(response)
+                    response.statusCode.should.equal(200)
+                    body.should.have.property("id")
+                    body.should.have.property("msg")
+                    body.id.should.equal(""+postId)
+                    body.msg.should.equal("testMessage")
+                    request({
+                        uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages/"+body.id,
+                        method:"DELETE",
+                        json:true
+                    },function(err,response,body){
+                        response.statusCode.should.equal(204)
+                        setTimeout(function(){
+                            request({
+                                uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages?visibilityWindow=1",
+                                method:"GET",
+                                json:true
+                            },function(error,response,body){
+                                should.exist(response)
+                                response.statusCode.should.equal(204)
+                                done()
+                            })
+                        },1100)
+                    })
+                })
+            })
+        })
+    })
+
+    describe("List Elements",function(done){
+        it("Should list all topics if a get is execute over /topics",function(done){
+            request({
+                uri:"http://127.0.0.1:8080/topics",
+                method:"GET",
+                json:true
+            },function(error,response,body){
+                response.statusCode.should.equal(200)
+                body.should.be.empty
+                request({
+                    url:"http://127.0.0.1:8080/topics",
+                    method:"POST",
+                    json:{name:"testTopic"}
+                },function(error,response,body){
+                    request({
+                        uri:"http://127.0.0.1:8080/topics",
+                        method:"GET",
+                        json:true
+                    },function(error,response,body){
+                        response.statusCode.should.equal(200)
+                        body.should.have.lengthOf(1)
+                        body.should.include("testTopic")
+                        done()
+                    })
+                })
+            })
+        })
+        it("Should list all consumer groups if a get is execute over /topics/topic/consumerGroups",function(done){
+            request({
+                url:"http://127.0.0.1:8080/topics",
+                method:"POST",
+                json:{name:"testTopic"}
+            },function(error,response,body){
+                response.statusCode.should.equal(201)
+                request({
+                    url:"http://127.0.0.1:8080/topics/testTopic/consumerGroups",
+                    method:"GET",
+                    json:true
+                },function(error,response,body){
+                    response.statusCode.should.equal(200)
+                    body.should.be.empty
+                    request({
+                        url:"http://127.0.0.1:8080/topics/testTopic/consumerGroups",
+                        method:"POST",
+                        json:{name:"testConsumer"}
+                    },function(error,response,body){
+                        request({
+                            url:"http://127.0.0.1:8080/topics/testTopic/consumerGroups",
+                            method:"GET",
+                            json:true
+                        },function(error,response,body){
+                            response.statusCode.should.equal(200)
+                            body.should.have.lengthOf(1)
+                            body.should.include("testConsumer")
+                            done()
+                        })
+                    })
+                }) 
+            })  
+        })
     })
 })

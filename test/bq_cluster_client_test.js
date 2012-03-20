@@ -376,13 +376,16 @@ describe("Big Queue Cluster",function(){
         })
 
         it("should generate and add a recipientCallback to the returned message",function(done){
+            //2 post because get message using round-robin
             bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,key){
-                bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
-                    should.not.exist(err)
-                    should.exist(data)
-                    data.should.have.property("uid")
-                    data.should.have.property("recipientCallback")
-                    done()
+                bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,key){
+                    bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                        should.not.exist(err)
+                        should.exist(data)
+                        data.should.have.property("uid")
+                        data.should.have.property("recipientCallback")
+                        done()
+                    })
                 })
            })
         })
@@ -448,12 +451,14 @@ describe("Big Queue Cluster",function(){
 
         it("should get the uid generated at post instance",function(done){
             bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,key){
-                var uid = key.uid
-                bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
-                    should.not.exist(err)
-                    should.exist(data)
-                    data.uid.should.equal(uid)
-                    done()
+                bqClient.postMessage("testTopic",{msg:"testMessage"},function(err,key2){
+                    var uid = key.uid
+                    bqClient.getMessage("testTopic","testGroup",undefined,function(err,data){
+                        should.not.exist(err)
+                        should.exist(data)
+                        data.uid.should.equal(uid)
+                        done()
+                    })
                 })
            })
 
