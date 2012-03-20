@@ -13,7 +13,6 @@ endef
 export REDIS1_CONF
 export REDIS2_CONF
 export ZOOCFG := test/resources/zoo.cfg
-export ZOOPIDDIR := /var/run
 test:
 	echo "$$REDIS1_CONF" | redis-server -
 	echo "$$REDIS2_CONF" | redis-server -
@@ -21,7 +20,7 @@ test:
 
 	node_modules/zookeeper/build/zookeeper-3.4.3/bin/zkServer.sh start ${ZOOCFG}
 
-	./node_modules/.bin/_mocha --globals myThis,myHolder,myCallee --reporter spec
+	./node_modules/.bin/_mocha --globals myThis,myHolder,myCallee --reporter spec ${TESTFILE}
 
 	node_modules/zookeeper/build/zookeeper-3.4.3/bin/zkServer.sh stop ${ZOOCFG}
 
