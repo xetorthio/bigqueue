@@ -133,14 +133,64 @@ describe("http api",function(){
             })
         })
     })
-    describe("Posting messages",function(){
-        it("should can post a message to /topics/topicName/messages",)
+    describe("Exchange Messages",function(done){
+        beforeEach(function(done){
+            request({
+                url:"http://127.0.0.1:8080/topics",
+                method:"POST",
+                json:{name:"testTopic"}
+            },function(error,response,body){
+                response.statusCode.should.equal(201)
+                request({
+                    url:"http://127.0.0.1:8080/topics/testTopic/consumerGroups",
+                    method:"POST",
+                    json:{name:"testConsumer1"}
+                },function(error,response,body){
+                    response.statusCode.should.equal(201)
+                    request({
+                        url:"http://127.0.0.1:8080/topics/testTopic/consumerGroups",
+                        method:"POST",
+                        json:{name:"testConsumer2"}
+
+                    },function(error,response,body){
+                        response.statusCode.should.equal(201)
+                        done()
+                    })
+                })
+            }) 
+
+        })
+        it("should receive posted messages",function(done){
+            request({
+                uri:"http://127.0.0.1:8080/topics/testTopic/messages",
+                method:"POST",
+                json:{msg:"testMessage"}
+            },function(error,response,body){
+                should.exist(response)
+                response.statusCode.should.equal(201)
+                body.should.have.property("id")
+                var postId = body.id
+                request({
+                    uri:"http://127.0.0.1:8080/topics/testTopic/consumerGroups/testConsumer1/messages",
+                    method:"GET",
+                    json:true
+                },function(error,response,body){
+                    should.exist(response)
+                    response.statusCode.should.equal(200)
+                    body.should.have.property("id")
+                    body.should.have.property("msg")
+                    body.id.should.equal(""+postId)
+                    body.msg.should.equal("testMessage")
+                    done()
+                })
+            })
+        })
+        it("should get an error if we try to get messages from non existent topic")
+        it("should can get messages from a consumer group")
+        it("should can get the same message if this is posted to 2 consumer groups")
+        it("should different messages if to members of the same consumer group do a 'get message'")
+        it("should receive the same message if the visibility window is rached")
+        it("should enable to do a DELETE of a message so this message shouldn't be received another time")
+        it("if a message is set as fail this should be received another time into the same consumer group")
     })
-    it("should get an error if topic doesn't exist")
-    it("should can get messages from a consumer group")
-    it("should can get the same message if this is posted to 2 consumer groups")
-    it("should different messages if to members of the same consumer group do a 'get message'")
-    it("should receive the same message if the visibility window is rached")
-    it("should enable to do a DELETE of a message so this message shouldn't be received another time")
-    it("if a message is set as fail this should be received another time into the same consumer group")
 })
