@@ -20,7 +20,7 @@ describe("Big Queue Cluster",function(){
     var bqClientConfig = {
         "zkConfig":zkConfig,
         "zkClusterPath":clusterPath,
-        "createClientFunction":bq.createClient
+        "createNodeClientFunction":bq.createClient
     }
 
     var zk = new ZK(zkConfig)

@@ -20,7 +20,7 @@ test:
 
 	node_modules/zookeeper/build/zookeeper-3.4.3/bin/zkServer.sh start ${ZOOCFG}
 
-	./node_modules/.bin/_mocha --globals myThis,myHolder,myCallee --reporter spec ${TESTFILE}
+	./node_modules/.bin/_mocha --globals myThis,myHolder,myCallee,State_myThis --reporter spec -t 5000 -s 3000 ${TESTFILE}
 
 	node_modules/zookeeper/build/zookeeper-3.4.3/bin/zkServer.sh stop ${ZOOCFG}
 

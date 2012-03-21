@@ -46,7 +46,6 @@ app.post("/topics/:topic/consumerGroups",function(req,res){
         }
         var topic = req.params.topic
         bqClient.createConsumerGroup(topic,consumer.name,function(err){
-            console.log(err)
             if(err){
                 res.json(err,409)
             }else{
