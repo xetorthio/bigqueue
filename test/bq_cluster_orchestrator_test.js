@@ -1,7 +1,8 @@
 var should = require("should"),
     ZK = require("zookeeper"),
     oc = require("../lib/bq_cluster_orchestrator.js"),
-    bq = require("../lib/bq_client.js")
+    bq = require("../lib/bq_client.js"),
+    redis = require("redis")
 
 describe("Orchestrator",function(){
     var clusterPath = "/bq/clusters/test"
@@ -26,6 +27,8 @@ describe("Orchestrator",function(){
     var zk = new ZK(zkConfig)
 
     before(function(done){
+         redisClient1 = redis.createClient()
+         redisClient2 = redis.createClient(6380,"127.0.0.1")
          zk.connect(function(err){
             if(err){
                 done(err)
@@ -92,6 +95,14 @@ describe("Orchestrator",function(){
         })
     }) 
 
+    beforeEach(function(done){
+        redisClient1.flushall(function(err,data){
+            redisClient2.flushall(function(err,data){
+                done()
+            })
+        })
+    })
+
     it("Should check nodes status when any event is produced",function(done){
         var orch = oc.createOrchestrator(ocConfig)
         orch.on("ready",function(){
@@ -133,12 +144,160 @@ describe("Orchestrator",function(){
             },200)
         })
     })
-    it("Should check nodes periodically looking for inconsistencies and sync if one is found")
-    it("Should sync new nodes")
-    it("Should sync nodes if the status will be change to UP")
-    it("Should not sync nodes in FORCEDOWN status")
-    it("should detect new nodes")
-    it("should detect new topics")
-    it("should detect new clusters")
+    it("Should check nodes periodically looking for inconsistencies and sync if one is found",function(done){
+        zk.a_create("/bq/clusters/test/topics/test2","",0,function(rc,error,path){
+            zk.a_create("/bq/clusters/test/topics/test2/consumerGroups","",0,function(rc,error,path){
+                zk.a_create("/bq/clusters/test/topics/test2/consumerGroups/testConsumer","",0,function(rc,error,path){
+                    redisClient1.exists("topics:test2:ttl",function(err,data){
+                        data.should.equal(0)
+                        redisClient1.sismember("topics","test2",function(err,data){
+                            data.should.equal(0)
+                            redisClient1.exists("topics:test2:consumers:testConsumer:last",function(err,data){
+                                data.should.equal(0)
+                                redisClient2.exists("topics:test2:ttl",function(err,data){
+                                    data.should.equal(0)
+                                    redisClient2.exists("topics:test2:consumers:testConsumer:last",function(err,data){
+                                        data.should.equal(0)
+                                        redisClient2.sismember("topics","test2",function(err,data){
+                                        data.should.equal(0)
+                                            var orch = oc.createOrchestrator(ocConfig)
+                                            orch.on("ready",function(){
+                                                setTimeout(function(){
+                                                    redisClient1.exists("topics:test2:ttl",function(err,data){
+                                                        data.should.equal(1)
+                                                        redisClient1.exists("topics:test2:consumers:testConsumer:last",function(err,data){
+                                                            data.should.equal(1)
+                                                            redisClient1.sismember("topics","test2",function(err,data){
+                                                                data.should.equal(1)
+                                                                redisClient2.sismember("topics","test2",function(err,data){
+                                                                    data.should.equal(1)
+                                                                    redisClient2.exists("topics:test2:ttl",function(err,data){
+                                                                        redisClient2.exists("topics:test2:consumers:testConsumer:last",function(err,data){
+                                                                            redisClient2.sismember("topics","test2",function(err,data){
+                                                                                 data.should.equal(1)
+                                                                                 done()
+                                                                                 orch.shutdown()
+                                                                            })
+                                                                        })
+                                                                    })
+                                                                })
+                                                            })
+                                                        })
+                                                    })
+                                                },1200)
+                                            })
+                                        })
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
+    })
+    it("Should sync new nodes",function(done){
+        zk.a_create("/bq/clusters/test/topics/test2","",0,function(rc,error,path){
+            zk.a_create("/bq/clusters/test/topics/test2/consumerGroups","",0,function(rc,error,path){
+                zk.a_create("/bq/clusters/test/topics/test2/consumerGroups/testConsumer","",0,function(rc,error,path){
+                    zk.a_delete_("/bq/clusters/test/nodes/redis1",-1,function(rc,err){
+                        var orch = oc.createOrchestrator(ocConfig)
+                        orch.on("ready",function(){
+                            redisClient1.sismember("topics","test2",function(err,data){
+                                data.should.equal(0)
+                                redisClient1.exists("topics:test2:consumers:testConsumer:last",function(err,data){
+                                    data.should.equal(0)
+                                    redisClient1.sismember("topics","test2",function(err,data){
+                                        data.should.equal(0)
+                                        zk.a_create("/bq/clusters/test/nodes/redis1",JSON.stringify({"host":"127.0.0.1","port":6379,"errors":0,"status":"DOWN"}),0,function(rc,error,path){
+                                            setTimeout(function(){
+                                                redisClient1.sismember("topics","test2",function(err,data){
+                                                    data.should.equal(1)
+                                                    redisClient1.exists("topics:test2:consumers:testConsumer:last",function(err,data){
+                                                        data.should.equal(1)
+                                                         redisClient1.sismember("topics","test2",function(err,data){
+                                                            data.should.equal(1)
+                                                            zk.a_get("/bq/clusters/test/nodes/redis1",false,function(rc,error,stat,data){
+                                                               var d = JSON.parse(data)
+                                                               d.status.should.equal("UP")
+                                                               done()
+                                                               orch.shutdown()
+                                                            })
+                                                         })
+                                                    })
+                                                })
+                                            },1200);
+                                        }) 
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
+
+    })
+    it("Should sync new nodes in new clusters",function(done){
+        deleteAll(zk,"/bq/clusters",function(){
+            var orch = oc.createOrchestrator(ocConfig)
+            orch.on("ready",function(){
+                redisClient1.sismember("topics","test2",function(err,data){
+                    data.should.equal(0)
+                    redisClient1.exists("topics:test2:consumers:testConsumer:last",function(err,data){
+                        data.should.equal(0)
+                        redisClient1.sismember("topics","test2",function(err,data){
+                            data.should.equal(0)
+                            zk.a_create("/bq/clusters/test2","",0,function(rc,error,path){
+                                zk.a_create("/bq/clusters/test2/nodes","",0,function(rc,error,path){
+                                   zk.a_create("/bq/clusters/test2/nodes/redis-test",JSON.stringify({"host":"127.0.0.1","port":6379,"errors":0,"status":"DOWN"}),0,function(rc,error,path){
+                                        zk.a_create("/bq/clusters/test2/topics","",0,function(rc,error,path){
+                                            zk.a_create("/bq/clusters/test2/topics/test2","",0,function(rc,error,path){
+                                                zk.a_create("/bq/clusters/test2/topics/test2/consumerGroups","",0,function(rc,error,path){
+                                                    zk.a_create("/bq/clusters/test2/topics/test2/consumerGroups/testConsumer","",0,function(rc,error,path){
+                                                        setTimeout(function(){
+                                                            redisClient1.sismember("topics","test2",function(err,data){
+                                                                data.should.equal(1)
+                                                                redisClient1.exists("topics:test2:consumers:testConsumer:last",function(err,data){
+                                                                    data.should.equal(1)
+                                                                    done()
+                                                                    orch.shutdown()
+                                                                })
+                                                            })
+                                                        },1200)
+                                                    })
+                                                })
+                                            })
+                                        })
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
+      
+    })
+    it("Should not sync nodes in FORCEDOWN status",function(done){
+        var orch = oc.createOrchestrator(ocConfig)
+        orch.on("ready",function(){
+            setTimeout(function(){
+                zk.a_set("/bq/clusters/test/nodes/redis1",JSON.stringify({"host":"127.0.0.1","port":6379,"errors":1,"status":"FORCEDOWN"}),-1,function(){
+                    setTimeout(function(){
+                        zk.a_get("/bq/clusters/test/nodes/redis1",false,function(rc,error,stat,data){
+                           should.exist(rc)
+                           rc.should.equal(0)
+                           should.exist(data)
+                           var d = JSON.parse(data)
+                           d.status.should.equal("FORCEDOWN")
+                           done()
+                           orch.shutdown()
+                        })
+                    },100)
+                })
+            },200)
+        })
+    })
 
 })
