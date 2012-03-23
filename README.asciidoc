@@ -22,3 +22,11 @@ TODO
 === Monitoring
 
 TODO
+
+=== Testing
+
+To run the test you should run:
+
+----
+    make test
+----
