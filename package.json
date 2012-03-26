@@ -5,7 +5,7 @@
     "author": "",
     "engines": { "node":">= 0.6.7" },
     "scripts":{ "start":"node ./http_launcher.js" },
-    "bin":{ "bigqueue-http":"./http_launcher.js" },
+    "bin":{ "bigqueue-http":"./bin/http_launcher.js","bigqueue-orchestrator":"./bin/orchestrator_launcher.js" },
     "main":"lib/index",
     "repository": {
         "type": "git",
