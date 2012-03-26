@@ -17,7 +17,12 @@ TODO
 
 === Rest Interface
 
-TODO
+The rest interface can be runned using the bigqueue-http command installed at the module install time, this command will run in default mode (using a pre instaled redis at default port), if you want to configure it to run in cluster mode you could use the config example at _example/clusterconfig.js_
+
+If you want to run with the cluster configuration you should run
+----
+    ./node_modules/.bin/bigqueue-http ./node_modules/BigQueue/examples/clusterconfig.js
+----
 
 === Monitoring
 
