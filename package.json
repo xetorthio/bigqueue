@@ -1,10 +1,9 @@
 {
     "name": "bigqueue",
     "description": "",
-    "version": "0.0.5",
+    "version": "0.1.0",
     "author": "",
     "engines": { "node":">= 0.6.7" },
-    "scripts":{ "start":"node ./http_launcher.js" },
     "bin":{ "bigqueue-http":"./bin/http_launcher.js","bigqueue-orchestrator":"./bin/orchestrator_launcher.js" },
     "main":"lib/index",
     "repository": {
