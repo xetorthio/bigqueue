@@ -72,6 +72,16 @@ describe("http api",function(){
 
             })
         })
+        it("should get an error on invalid json",function(done){
+            request({
+                url:"http://127.0.0.1:8080/topics",
+                method:"POST",
+                body:"foo" 
+            },function(error,response,body){
+                response.statusCode.should.equal(400)
+                done()
+            })
+        })
     })
     
     describe("Create Consumer Groups",function(){
@@ -120,6 +130,17 @@ describe("http api",function(){
             })
 
         })
+        it("should get an error on invalid json",function(done){
+            request({
+                url:"http://127.0.0.1:8080/topics/testTopic/consumerGroups",
+                method:"POST",
+                body:"foo" 
+            },function(error,response,body){
+                response.statusCode.should.equal(400)
+                done()
+            })
+        })
+
         it("should get an error if topic doesn't exist",function(done){
             request({
                 url:"http://127.0.0.1:8080/topics/testTopic-no-exist/consumerGroups",
@@ -160,6 +181,17 @@ describe("http api",function(){
             }) 
 
         })
+        it("should get an error if a post message receive an invalid json",function(done){
+            request({
+                url:"http://127.0.0.1:8080/topics/testTopic/messages",
+                method:"POST",
+                body:"foo" 
+            },function(error,response,body){
+                response.statusCode.should.equal(400)
+                done()
+            })
+        })
+
         it("should receive posted messages",function(done){
             request({
                 uri:"http://127.0.0.1:8080/topics/testTopic/messages",

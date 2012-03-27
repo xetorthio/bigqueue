@@ -3,33 +3,63 @@ var app = express.createServer()
 var maxBody = 64*1024
 var bqClient
 
+var valid_element_regex=/^(\w|[0-9]){2,50}$/
 app.get("/topics",function(req,res){
-    bqClient.listTopics(function(data){
-        res.json(data,200)
-    })
+    try{
+        bqClient.listTopics(function(data){
+            res.json(data,200)
+        })
+    }catch(e){
+        res.json({err:"Error processing request ["+e+"]"},500)
+    }
+
 })
 
 app.post("/topics",function(req,res){
-    req.on("data",function(body){
-        var topic = JSON.parse(body)
-        bqClient.createTopic(topic.name,function(err){
-            if(err){
-                res.json(err,409)
-            }else{
-                res.json({name:topic.name},201)
+   var data=""
+   req.on("data",function(body){
+       data=data+body.toString()
+   })
+   req.on("end",function(){
+        var topic
+        try{
+            topic = JSON.parse(data)
+        }catch(e){
+            res.json({err:"Error parsing json ["+e+"]"},400)
+            return
+        }
+        try{
+            if(!topic.name.match(valid_element_regex)){
+                res.json({err:"Topic should be an string without special chars between 2 and 50 chars"},400)
+                return
             }
-        })
+            bqClient.createTopic(topic.name,function(err){
+                if(err){
+                    res.json(err,409)
+                }else{
+                    res.json({name:topic.name},201)
+                }
+            })
+        }catch(e){
+            res.json({err:"Error processing request ["+e+"]"},500)
+        }
     })
 })
 
 app.get("/topics/:topic/consumerGroups",function(req,res){
-    bqClient.getConsumerGroups(req.params.topic,function(err,data){
-        if(err){
-            res.json(err,400)
-        }else{
-            res.json(data,200)
-        }
-    })
+    try{
+        bqClient.getConsumerGroups(req.params.topic,function(err,data){
+   
+            if(err){
+                res.json(err,400)
+            }else{
+                res.json(data,200)
+            }
+        })
+    }catch(e){
+        res.json({err:"Error processing request ["+e+"]"},500)
+    }
+
 })
 
 app.post("/topics/:topic/consumerGroups",function(req,res){
@@ -45,13 +75,23 @@ app.post("/topics/:topic/consumerGroups",function(req,res){
             return
         }
         var topic = req.params.topic
-        bqClient.createConsumerGroup(topic,consumer.name,function(err){
-            if(err){
-                res.json(err,409)
-            }else{
-                res.json({name:consumer.name},201)
-            }
-        })
+        if(!consumer.name.match(valid_element_regex)){
+          res.json({err:"Consumer group should be an string without special chars between 2 and 50 chars"})
+          return
+        }
+
+        try{
+            bqClient.createConsumerGroup(topic,consumer.name,function(err){
+                if(err){
+                    res.json(err,409)
+                }else{
+                    res.json({name:consumer.name},201)
+                }
+            })
+        }catch(e){
+            res.json({err:"Error processing request ["+e+"]"},500)
+        }
+
 
     })
 })
@@ -69,39 +109,60 @@ app.post("/topics/:topic/messages",function(req,res){
     })
     req.on("end",function(){
         if(!excedes){
-            var message = JSON.parse(data)
-            bqClient.postMessage(req.params.topic,message,function(err,data){
-                if(err){
-                    res.json(err,400)
-                }else{
-                    res.json(data,201)
-                }
-            })
+            var message
+            try{
+                message = JSON.parse(data)
+ 
+            }catch(e){
+                res.json({err:"Error parsing json ["+e+"]"},400)
+                return
+            }
+            try{
+                bqClient.postMessage(req.params.topic,message,function(err,data){
+                    if(err){
+                        res.json(err,400)
+                    }else{
+                        res.json(data,201)
+                    }
+                })
+            }catch(e){
+                res.json({err:"Error processing request ["+e+"]"},500)
+            }
+
         }
     })
 })
 
 app.get("/topics/:topic/consumerGroups/:consumer/messages",function(req,res){
-    bqClient.getMessage(req.params.topic,req.params.consumer,req.query.visibilityWindow,function(err,data){
-        if(err){
-            res.json(err,400)
-        }else{
-            if(data && data.id)
-                res.json(data,200)
-            else
-                res.json({},204)
-        }
-    })
+    try{
+        bqClient.getMessage(req.params.topic,req.params.consumer,req.query.visibilityWindow,function(err,data){
+            if(err){
+                res.json(err,400)
+            }else{
+                if(data && data.id)
+                    res.json(data,200)
+                else
+                    res.json({},204)
+            }
+        })
+    }catch(e){
+        res.json({err:"Error processing request ["+e+"]"},500)
+    }
 })
 
 app.delete("/topics/:topic/consumerGroups/:consumer/messages/:recipientCallback",function(req,res){
-    bqClient.ackMessage(req.params.topic,req.params.consumer,req.params.recipientCallback,function(err){
-        if(err){
-            res.json(err,404)
-        }else{
-            res.json({},204)
-        }
-    })
+    try{
+        bqClient.ackMessage(req.params.topic,req.params.consumer,req.params.recipientCallback,function(err){
+            if(err){
+                res.json(err,404)
+            }else{
+                res.json({},204)
+            }
+        })
+    }catch(e){
+        res.json({err:"Error processing request ["+e+"]"},500)
+    }
+
 })
 
 exports.startup = function(config){
