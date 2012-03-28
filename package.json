@@ -15,7 +15,8 @@
         "redis" : "0.7.x",
        	"should" : "0.6.x",
         "request" : "2.9.x",
-        "zookeeper":"3.4.x"
+        "zookeeper":"3.4.x",
+        "hiredis":"0.1.x"
     },
     "devDependencies": {
         "mocha" : "0.14.x"
