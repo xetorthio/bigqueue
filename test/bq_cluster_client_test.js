@@ -2,7 +2,8 @@ var should = require('should'),
     redis = require('redis'),
     ZK = require('zookeeper'),
     bq = require('../lib/bq_client.js'),
-    bqc = require('../lib/bq_cluster_client.js')
+    bqc = require('../lib/bq_cluster_client.js'),
+    log = require('node-logging')
 
 var j = 0
 describe("Big Queue Cluster",function(){
@@ -30,6 +31,7 @@ describe("Big Queue Cluster",function(){
     var redisClient2
 
     before(function(done){
+        log.setLevel("critical")
         redisClient1 = redis.createClient(6379,"127.0.0.1")
         redisClient1.on("ready",function(){
             redisClient2= redis.createClient(6380,"127.0.0.1")

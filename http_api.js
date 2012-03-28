@@ -1,4 +1,6 @@
-var express = require('express')
+var express = require('express'),
+    log = require('node-logging')
+
 var app = express.createServer()
 var maxBody = 64*1024
 var bqClient
@@ -10,6 +12,7 @@ app.get("/topics",function(req,res){
             res.json(data,200)
         })
     }catch(e){
+        log.err("Error getting topics ["+log.pretty(e)+"]",true)
         res.json({err:"Error processing request ["+e+"]"},500)
     }
 
@@ -35,12 +38,14 @@ app.post("/topics",function(req,res){
             }
             bqClient.createTopic(topic.name,function(err){
                 if(err){
+                    log.err("Error creating topic ["+log.pretty(err)+"]")
                     res.json(err,409)
                 }else{
                     res.json({name:topic.name},201)
                 }
             })
         }catch(e){
+            log.err("Error creating topic ["+log.pretty(e)+"]",true)
             res.json({err:"Error processing request ["+e+"]"},500)
         }
     })
@@ -49,14 +54,15 @@ app.post("/topics",function(req,res){
 app.get("/topics/:topic/consumerGroups",function(req,res){
     try{
         bqClient.getConsumerGroups(req.params.topic,function(err,data){
-   
             if(err){
+                log.err("Error creating consumer group ["+log.pretty(req.params)+"] ["+log.pretty(err)+"]")
                 res.json(err,400)
             }else{
                 res.json(data,200)
             }
         })
     }catch(e){
+        log.err("Error creating consumer group ["+log.pretty(e)+"]",true)
         res.json({err:"Error processing request ["+e+"]"},500)
     }
 
@@ -126,6 +132,7 @@ app.post("/topics/:topic/messages",function(req,res){
                     }
                 })
             }catch(e){
+                log.err("Error posting message ["+log.pretty(e)+"]",true)
                 res.json({err:"Error processing request ["+e+"]"},500)
             }
 
@@ -146,6 +153,7 @@ app.get("/topics/:topic/consumerGroups/:consumer/messages",function(req,res){
             }
         })
     }catch(e){
+        log.err("Error getting message ["+log.pretty(e)+"]",true)
         res.json({err:"Error processing request ["+e+"]"},500)
     }
 })
@@ -160,13 +168,17 @@ app.delete("/topics/:topic/consumerGroups/:consumer/messages/:recipientCallback"
             }
         })
     }catch(e){
+        log.err("Error deleting message ["+log.pretty(e)+"]",true)
         res.json({err:"Error processing request ["+e+"]"},500)
     }
 
 })
 
 exports.startup = function(config){
-    app.use(express.logger({ format: ':method :url' }))
+    if(config.loggerConf){
+        app.use(express.logger(config.loggerConf));
+    }
+    log.setLevel(config.logLevel || "info")
     app.listen(config.port)
     bqClient = config.bqClientCreateFunction(config.bqConfig)
     console.log("http api running on ["+config.port+"]")

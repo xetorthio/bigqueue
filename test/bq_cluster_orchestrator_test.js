@@ -2,7 +2,8 @@ var should = require("should"),
     ZK = require("zookeeper"),
     oc = require("../lib/bq_cluster_orchestrator.js"),
     bq = require("../lib/bq_client.js"),
-    redis = require("redis")
+    redis = require("redis"),
+    log = require("node-logging")
 
 describe("Orchestrator",function(){
     var clusterPath = "/bq/clusters/test"
@@ -27,6 +28,7 @@ describe("Orchestrator",function(){
     var zk = new ZK(zkConfig)
 
     before(function(done){
+         log.setLevel("critical")
          redisClient1 = redis.createClient()
          redisClient2 = redis.createClient(6380,"127.0.0.1")
          zk.connect(function(err){

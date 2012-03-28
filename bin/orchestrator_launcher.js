@@ -17,7 +17,7 @@ var ocConfig = {
     "zkClustersPath":"/bq/clusters",
     "zkConfig":zkConfig,
     "createNodeClientFunction":bq.createClient,
-    "checkInterval":500
+    "checkInterval":2000
 }
 
 var config 
