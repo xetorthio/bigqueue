@@ -23,7 +23,8 @@ describe("Orchestrator",function(){
         "zkClustersPath":"/bq/clusters",
         "zkConfig":zkConfig,
         "createNodeClientFunction":bq.createClient,
-        "checkInterval":500
+        "checkInterval":500,
+        "logLevel":"critical"
     }
     var zk = new ZK(zkConfig)
 
