@@ -1,6 +1,7 @@
 var should = require('should'),
-    redis = require('redis')
-    bq = require('../lib/bq_client.js')
+    redis = require('redis'),
+    bq = require('../lib/bq_client.js'),
+    log = require("node-logging")
 
 describe("Big Queue Client",function(){
     
@@ -8,6 +9,7 @@ describe("Big Queue Client",function(){
     var redisConf= {host:"127.0.0.1",port:6379}
     var bqClient
     before(function(done){
+        log.setLevel("critical")
         bqClient = bq.createClient(redisConf)
         bqClient.on("ready",function(){
             redisClient = redis.createClient()
